@@ -23,7 +23,6 @@ public class BillingService {
     private final BillingRepository billingRepository;
     private final AuthorizationClient authorizationClient;
 
-    // 월별 청구서 생성
     @Transactional
     public BillingResponse createMonthlyBilling(
             String cardNumber, String month) {
@@ -31,25 +30,25 @@ public class BillingService {
         log.info("청구서 생성 시작 - cardNumber: {}, month: {}",
                 cardNumber, month);
 
-        // 1. approval-service에서 해당 월 승인 내역 조회
+        // 1. 카드번호 마스킹
+        String masked = maskCardNumber(cardNumber);
+
+        // 2. approval-service에서 해당 월 승인 내역 조회
         List<AuthorizationHistoryResponse> approvedList =
-                authorizationClient.getMonthlyApproved(cardNumber, month);
+                authorizationClient.getMonthlyApproved(masked, month);
 
         if (approvedList.isEmpty()) {
             throw new IllegalStateException("해당 월 승인 내역이 없습니다");
         }
 
-        // 2. 총 청구금액 합산
+        // 3. 총 청구금액 합산
         BigDecimal totalAmount = approvedList.stream()
                 .map(AuthorizationHistoryResponse::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 3. 카드번호 마스킹 (approval-service에서 이미 마스킹된 값)
-        String cardNumberMasked = approvedList.get(0).getCardNumberMasked();
-
         // 4. billings 테이블 저장
         Billing billing = Billing.builder()
-                .cardNumberMasked(cardNumberMasked)
+                .cardNumberMasked(masked)
                 .billingMonth(month)
                 .totalAmount(totalAmount)
                 .transactionCount(approvedList.size())
@@ -59,11 +58,11 @@ public class BillingService {
 
         billingRepository.save(billing);
 
-        log.info("청구서 생성 완료 - cardNumber: {}, totalAmount: {}",
-                cardNumberMasked, totalAmount);
+        log.info("청구서 생성 완료 - cardNumberMasked: {}, totalAmount: {}",
+                masked, totalAmount);
 
         return BillingResponse.builder()
-                .cardNumberMasked(cardNumberMasked)
+                .cardNumberMasked(masked)
                 .billingMonth(month)
                 .totalAmount(totalAmount)
                 .transactionCount(approvedList.size())
@@ -72,10 +71,12 @@ public class BillingService {
                 .build();
     }
 
-    // 청구 내역 조회
     public List<BillingResponse> getBillingHistory(String cardNumber) {
+        // 마스킹된 값으로 조회
+        String masked = maskCardNumber(cardNumber);
+
         return billingRepository
-                .findByCardNumberMaskedOrderByBillingMonthDesc(cardNumber)
+                .findByCardNumberMaskedOrderByBillingMonthDesc(masked)
                 .stream()
                 .map(b -> BillingResponse.builder()
                         .cardNumberMasked(b.getCardNumberMasked())
@@ -86,5 +87,15 @@ public class BillingService {
                         .billedAt(b.getBilledAt())
                         .build())
                 .toList();
+    }
+
+    // 카드번호 마스킹 (1234-****-****-5678)
+    private String maskCardNumber(String cardNumber) {
+        if (cardNumber == null || cardNumber.length() < 16) {
+            return cardNumber;
+        }
+        return cardNumber.substring(0, 4)
+                + "-****-****-"
+                + cardNumber.substring(cardNumber.length() - 4);
     }
 }
