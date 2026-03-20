@@ -39,8 +39,10 @@
 
 - **Java 17**
 - **Spring Boot 3.5.12**
-- **Spring Cloud 2025.0.1** (Eureka Client)
+- **Spring Cloud 2025.0.1**
 - **Spring Data JPA**
+- **OpenFeign** (서비스 간 통신)
+- **Eureka Client** (서비스 디스커버리)
 - **MySQL 8.0**
 - **Lombok**
 - **Swagger (SpringDoc OpenAPI 2.3.0)**
@@ -51,7 +53,8 @@
 
 ```
 wooricard-approval-service (:8081)
-  ↓ GET /api/authorization/approved/monthly
+  ↓ OpenFeign
+  GET /api/authorization/approved/monthly
 wooricard-billing-service (:8083)   ← 본 서비스
   ↓ 카드별 사용금액 합산
   ↓ 청구서 생성
@@ -72,7 +75,8 @@ wooricard-billing-service
 ```
 [월말]
 billing-service
-  → approval-service에서 해당 월 승인 내역 조회
+  → approval-service에서 해당 월 승인 내역 조회 (OpenFeign)
+  → 카드번호 마스킹 처리
   → 카드별 사용금액 합산
   → 청구서 생성 (billings 테이블 저장)
 ```
@@ -85,6 +89,13 @@ PENDING (청구 대기)
     → PAID (납부 완료)
 ```
 
+### 카드번호 마스킹
+
+```
+입력:  6011111111111117
+출력:  6011-****-****-1117
+```
+
 ---
 
 ## 프로젝트 구조
@@ -94,9 +105,9 @@ wooricard-billing-service/
 ├── build.gradle
 ├── src/main/
 │   ├── java/com/card/payment/billing/
-│   │   ├── BillingApplication.java
+│   │   ├── BillingApplication.java          # @EnableFeignClients
 │   │   ├── client/
-│   │   │     └── AuthorizationClient.java   # approval-service 호출
+│   │   │     └── AuthorizationClient.java   # OpenFeign interface
 │   │   ├── controller/
 │   │   │     └── BillingController.java
 │   │   ├── dto/
@@ -104,7 +115,7 @@ wooricard-billing-service/
 │   │   │     └── BillingResponse.java
 │   │   ├── entity/
 │   │   │     ├── Billing.java
-│   │   │     └── BillingStatus.java         # PENDING / BILLED / PAID
+│   │   │     └── BillingStatus.java
 │   │   ├── repository/
 │   │   │     └── BillingRepository.java
 │   │   └── service/
@@ -157,25 +168,25 @@ POST /api/billing/monthly
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|------|------|
-| cardNumber | String | ✅ | 카드번호 |
+| cardNumber | String | ✅ | 카드번호 (원본) |
 | month | String | ✅ | 청구 년월 (예: 2026-03) |
 
 **요청 예시**
 ```
 POST http://localhost:8083/api/billing/monthly
-  ?cardNumber=4111111111111111
+  ?cardNumber=6011111111111117
   &month=2026-03
 ```
 
 **응답 예시**
 ```json
 {
-  "cardNumberMasked": "4111-****-****-1111",
+  "cardNumberMasked": "6011-****-****-1117",
   "billingMonth": "2026-03",
-  "totalAmount": 30000,
-  "transactionCount": 3,
+  "totalAmount": 50000,
+  "transactionCount": 1,
   "status": "BILLED",
-  "billedAt": "2026-03-20T10:00:00"
+  "billedAt": "2026-03-20T14:36:48"
 }
 ```
 
@@ -191,40 +202,59 @@ GET /api/billing/{cardNumber}
 
 **요청 예시**
 ```
-GET http://localhost:8083/api/billing/4111111111111111
+GET http://localhost:8083/api/billing/6011111111111117
 ```
 
 **응답 예시**
 ```json
 [
   {
-    "cardNumberMasked": "4111-****-****-1111",
+    "cardNumberMasked": "6011-****-****-1117",
     "billingMonth": "2026-03",
-    "totalAmount": 30000,
-    "transactionCount": 3,
+    "totalAmount": 50000,
+    "transactionCount": 1,
     "status": "BILLED",
-    "billedAt": "2026-03-20T10:00:00"
+    "billedAt": "2026-03-20T14:36:48"
   }
 ]
-```
-
-#### 3. 헬스체크
-
-```
-GET /api/health
 ```
 
 ---
 
 ## 서비스 간 통신
 
-### approval-service 호출
+### OpenFeign으로 approval-service 호출
 
-billing-service는 **RestClient**를 사용하여 approval-service의 월별 승인 내역을 조회합니다.
+```java
+@FeignClient(
+    name = "wooricard-approval-service",
+    url = "${approval.service.url}"
+)
+public interface AuthorizationClient {
+
+    @GetMapping("/api/authorization/approved/monthly")
+    List<AuthorizationHistoryResponse> getMonthlyApproved(
+            @RequestParam String cardNumberMasked,
+            @RequestParam String month
+    );
+}
+```
+
+### 통신 흐름
 
 ```
-GET /api/authorization/approved/monthly
-  ?cardNumber={cardNumber}&month={month}
+POST /api/billing/monthly?cardNumber=6011111111111117&month=2026-03
+  ↓
+BillingService
+  ↓ 카드번호 마스킹 (6011-****-****-1117)
+  ↓ OpenFeign 호출
+approval-service
+  GET /api/authorization/approved/monthly
+    ?cardNumberMasked=6011-****-****-1117&month=2026-03
+  ↓ 승인 내역 반환
+BillingService
+  ↓ 금액 합산 → 청구서 생성
+billing_db 저장
 ```
 
 ### Eureka 연동
@@ -277,16 +307,34 @@ spring:
   application:
     name: wooricard-billing-service
   datasource:
-    url: jdbc:mysql://localhost:3306/billing_db
+    url: jdbc:mysql://localhost:3306/billing_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    username: root
+    password: 1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+    defer-datasource-initialization: true
   sql:
     init:
       mode: never
 
 server:
   port: 8083
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+logging:
+  level:
+    com.card.payment: DEBUG
 
 # 승인 서비스 연동
 approval:
@@ -300,9 +348,19 @@ eureka:
       defaultZone: http://192.168.1.80:8761/eureka/
   instance:
     prefer-ip-address: true
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+    doc-expansion: none
 ```
 
-### build.gradle 주요 의존성
+### build.gradle
 
 ```gradle
 plugins {
@@ -320,6 +378,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
     runtimeOnly 'com.mysql:mysql-connector-j'
@@ -358,9 +417,18 @@ spring:
       enabled: false
 ```
 
+### approval-service 연결 실패 시
+
+```
+1. approval-service 실행 여부 확인
+2. application.yml의 approval.service.url 확인
+3. 다른 PC라면 IP 주소로 변경
+   approval.service.url: http://유림PC_IP:8081
+```
+
 ### Eureka 연결 실패 시
 
 ```
-Eureka 서버가 먼저 실행되어 있는지 확인
+Eureka 서버 실행 여부 확인
 http://192.168.1.80:8761 접속 확인
 ```
