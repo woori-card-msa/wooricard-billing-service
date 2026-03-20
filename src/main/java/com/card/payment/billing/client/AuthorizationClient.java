@@ -25,14 +25,27 @@ public class AuthorizationClient {
     public List<AuthorizationHistoryResponse> getMonthlyApproved(
             String cardNumber, String month) {
 
-        log.info("승인 내역 조회 요청 - cardNumber: {}, month: {}",
-                cardNumber, month);
+        // 카드번호 마스킹 처리
+        String masked = maskCardNumber(cardNumber);
+
+        log.info("승인 내역 조회 요청 - cardNumberMasked: {}, month: {}",
+                masked, month);
 
         return restClient.get()
                 .uri("/api/authorization/approved/monthly"
-                        + "?cardNumber=" + cardNumber
+                        + "?cardNumberMasked=" + masked  // ← 수정!
                         + "&month=" + month)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
+    }
+
+    // 카드번호 마스킹 (1234-****-****-5678)
+    private String maskCardNumber(String cardNumber) {
+        if (cardNumber == null || cardNumber.length() < 16) {
+            return cardNumber;
+        }
+        return cardNumber.substring(0, 4)
+                + "-****-****-"
+                + cardNumber.substring(cardNumber.length() - 4);
     }
 }
