@@ -266,6 +266,49 @@ Eureka 대시보드: http://192.168.1.80:8761
 
 ---
 
+## 환경 설정
+
+### 환경 설정 (Environment Variables)
+
+이 프로젝트는 환경 변수를 통해 설정을 관리합니다. 
+로컬 실행을 위해 프로젝트 루트 디렉토리에 `.env` 파일을 생성하고 필요한 값을 설정해주세요.
+
+1. `.env.example` 파일을 복사하여 `.env` 파일을 생성합니다.
+```.env
+  # Server Configuration
+  SERVER_PORT=8083
+  APP_NAME=wooricard-billing-service
+  
+  # Infrastructure Addresses
+  CONFIG_SERVER_URL=http://localhost:8888
+  EUREKA_SERVER_URL=http://localhost/eureka/
+  
+  # Database
+  DB_HOST=localhost
+  DB_USERNAME=your_username
+  DB_PASSWORD=your_password
+```
+
+2. 각 항목에 맞는 로컬 인프라 정보를 입력합니다. (DB 계정 등)
+
+| 변수명 | 설명 | 기본값 |
+| :--- | :--- | :--- |
+| `SERVER_PORT` | 서비스 포트 번호 | `8083` |
+| `CONFIG_SERVER_URL` | Config 서버 주소 | `http://localhost:8888` |
+| `DB_PASSWORD` | 로컬 MySQL 비밀번호 | (팀 내부 공유 필요) |
+
+### ⚠️ 실행 전 주의사항
+본 서비스는 중앙 설정 관리 서버가 필요합니다. 
+반드시 아래 서버를 먼저 구동한 후 실행해 주세요.
+
+1. **Eureka Server**: [이동하기](https://github.com/woori-card-msa/wooricard-eureka?tab=readme-ov-file#-%EC%8B%A4%ED%96%89-%EB%B0%A9%EB%B2%95-getting-started)
+2. **Config Server**: [이동하기](https://github.com/woori-card-msa/wooricard-config?tab=readme-ov-file#-%EC%8B%A4%ED%96%89-%EB%B0%A9%EB%B2%95-getting-started)
+3. **Approval Service** : [이동하기](https://github.com/woori-card-msa/wooricard-approval-service?tab=readme-ov-file#%ED%99%98%EA%B2%BD-%EC%84%A4%EC%A0%95)
+
+> **Tip:** Config Server의 구동 방식이나 Git Repo 설정은 [해당 README.md](https://github.com/woori-card-msa/wooricard-config#readme)를 참고하세요.
+
+---
+
 ## 실행 방법
 
 ### 1. DB 생성
@@ -294,105 +337,6 @@ BillingApplication.java 열기
 ```
 Swagger:  http://localhost:8083/swagger-ui.html
 Eureka:   http://192.168.1.80:8761
-```
-
----
-
-## 환경 설정
-
-### application.yml
-
-```yaml
-spring:
-  application:
-    name: wooricard-billing-service
-  datasource:
-    url: jdbc:mysql://localhost:3306/billing_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-    username: root
-    password: 1234
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
-    defer-datasource-initialization: true
-  sql:
-    init:
-      mode: never
-
-server:
-  port: 8083
-  servlet:
-    encoding:
-      charset: UTF-8
-      enabled: true
-      force: true
-
-logging:
-  level:
-    com.card.payment: DEBUG
-
-# 승인 서비스 연동
-approval:
-  service:
-    url: http://localhost:8081
-
-# Eureka 연동
-eureka:
-  client:
-    service-url:
-      defaultZone: http://192.168.1.80:8761/eureka/
-  instance:
-    prefer-ip-address: true
-
-springdoc:
-  api-docs:
-    path: /api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    tags-sorter: alpha
-    operations-sorter: alpha
-    display-request-duration: true
-    doc-expansion: none
-```
-
-### build.gradle
-
-```gradle
-plugins {
-    id 'org.springframework.boot' version '3.5.12'
-    id 'io.spring.dependency-management' version '1.1.7'
-}
-
-group = 'com.wooricard'
-
-ext {
-    set('springCloudVersion', "2025.0.1")
-}
-
-dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
-    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
-    runtimeOnly 'com.mysql:mysql-connector-j'
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    implementation project(':common')
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-}
-
-dependencyManagement {
-    imports {
-        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
-    }
-}
 ```
 
 ---
