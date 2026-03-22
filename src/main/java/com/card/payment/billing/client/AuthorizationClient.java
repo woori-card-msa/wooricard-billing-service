@@ -7,10 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(
-        name = "wooricard-approval-service",
-        url = "${approval.service.url}"
-)
+@FeignClient(name = "wooricard-approval-service")
 public interface AuthorizationClient {
 
     @GetMapping("/api/authorization/approved/monthly")
