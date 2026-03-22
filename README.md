@@ -227,8 +227,7 @@ GET http://localhost:8083/api/billing/6011111111111117
 
 ```java
 @FeignClient(
-    name = "wooricard-approval-service",
-    url = "${approval.service.url}"
+    name = "wooricard-approval-service"
 )
 public interface AuthorizationClient {
 
