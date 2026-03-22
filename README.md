@@ -75,8 +75,8 @@ wooricard-billing-service
 ```
 [월말]
 billing-service
-  → approval-service에서 해당 월 승인 내역 조회 (OpenFeign)
   → 카드번호 마스킹 처리
+  → approval-service에서 해당 월 승인 내역 조회 (OpenFeign)
   → 카드별 사용금액 합산
   → 청구서 생성 (billings 테이블 저장)
 ```
