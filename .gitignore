@@ -8,7 +8,6 @@ bin/
 *.war
 *.ear
 *.nar
-src/main/resources/application.yml
 
 # Gradle (혹시 나중에 쓸 경우 대비)
 .gradle/

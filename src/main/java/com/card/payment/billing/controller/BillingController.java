@@ -3,6 +3,7 @@ package com.card.payment.billing.controller;
 import com.card.payment.billing.dto.BillingResponse;
 import com.card.payment.billing.service.BillingService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +25,9 @@ public class BillingController {
             description = "카드번호와 청구월을 받아 청구서를 생성합니다.")
     @PostMapping("/monthly")
     public ResponseEntity<BillingResponse> createMonthlyBilling(
+            @Parameter(example = "6011111111111117")
             @RequestParam String cardNumber,
+            @Parameter(example = "2026-03")
             @RequestParam String month) {
 
         log.info("청구서 생성 요청 - cardNumber: {}, month: {}",
@@ -38,6 +41,7 @@ public class BillingController {
             description = "카드번호로 전체 청구 내역을 조회합니다.")
     @GetMapping("/{cardNumber}")
     public ResponseEntity<List<BillingResponse>> getBillingHistory(
+            @Parameter(example = "6011111111111117")
             @PathVariable String cardNumber) {
 
         log.info("청구 내역 조회 - cardNumber: {}", cardNumber);
